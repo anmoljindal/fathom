@@ -18,7 +18,6 @@ def google_gen_query_url(keywords, search_options=["safe_mode"]):
         query_url += "&safe=off"
     return query_url
 
-
 def google_image_url_from_webpage(driver, max_number):
     thumb_elements_old = []
     thumb_elements = []
@@ -103,41 +102,3 @@ def crawl_image_urls(keywords, max_number=10000, search_options=["safe_mode"],
 
     print("\n== {0} out of {1} crawled images urls will be used.\n".format(output_num, len(image_urls)))
     return image_urls[0:output_num]
-
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description="Image Downloader")
-    parser.add_argument("keywords", type=str,
-                        help='Keywords to search. ("in quotes")')
-    parser.add_argument("--max-number", "-n", type=int, default=100,
-                        help="Max number of images download for the keywords.")
-    parser.add_argument("--safe-mode", "-S", action="store_true", default=False,
-                        help="Turn on safe search mode. (Only effective in Google)")
-    parser.add_argument("--face-only", "-F", action="store_true", default=False,
-                        help="Only search for ")
-    parser.add_argument("--proxy_http", "-ph", type=str, default=None,
-                        help="Set http proxy (e.g. 192.168.0.2:8080)")
-    parser.add_argument("--proxy_socks5", "-ps", type=str, default=None,
-                        help="Set socks5 proxy (e.g. 192.168.0.2:1080)")
-
-    args = parser.parse_args()
-
-    proxy_type = None
-    proxy = None
-    if args.proxy_http is not None:
-        proxy_type = "http"
-        proxy = args.proxy_http
-    elif args.proxy_socks5 is not None:
-        proxy_type = "socks5"
-        proxy = args.proxy_socks5
-
-    search_options = list()
-    if args.face_only:
-        search_options.append("face_only")
-    if args.safe_mode:
-        search_options.append("safe_mode")
-
-    crawled_urls = crawl_image_urls(args.keywords,max_number=args.max_number, search_options=search_options,
-                                    proxy_type=proxy_type, proxy=proxy)
-
-    print(crawled_urls)
