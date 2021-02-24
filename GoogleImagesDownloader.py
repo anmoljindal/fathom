@@ -1,6 +1,6 @@
 import os
 import sys
-import json
+# import json
 import shutil
 import asyncio
 from pathlib import Path
@@ -8,30 +8,32 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image
 
-import crawler
-import async_downloder
+import Crawler
+import AsyncDownloader
 
 pd.options.mode.chained_assignment = None
 
-def read_config(filename):
-    with open(filename, "r") as file:
-        data = json.load(file)
-    return data
+# def read_config(filename):
+#     with open(filename, "r") as file:
+#         data = json.load(file)
+#     return data
 
-def download_images(config):
+# def download_images(config):
+def download_images(working_dir, groups, proxy=None, proxy_type=None, download_timeout=20):
 
-    working_dir = Path(config['working_dir'])
-    if 'proxy' in config:
-        proxy_type = config['proxy']['proxy_type']
-        proxy = config['proxy']['proxy']
-    else:
-        proxy_type = None
-        proxy = None
+    # working_dir = Path(config['working_dir'])
+    # if 'proxy' in config:
+    #     proxy_type = config['proxy']['proxy_type']
+    #     proxy = config['proxy']['proxy']
+    # else:
+    #     proxy_type = None
+    #     proxy = None
 
-    download_timeout = 20 #standard
-    if 'download_timeout' in config:
-        download_timeout = config['download_timeout']
+    # download_timeout = 20 #standard
+    # if 'download_timeout' in config:
+    #     download_timeout = config['download_timeout']
 
+    working_dir = Path(working_dir)
     details = {
         "category":[],
         "keyword":[],
@@ -39,7 +41,7 @@ def download_images(config):
         "image_url":[]
     }
     
-    for category, category_config in config['groups'].items():
+    for category, category_config in groups.items():
         print('running for category: {}'.format(category))
         category_path = working_dir/category
         if not os.path.exists(category_path):
@@ -55,12 +57,12 @@ def download_images(config):
             if keyword_image_limit == 0:
                 keyword_image_limit = default_keyword_image_limit
 
-            images = crawler.crawl_image_urls(keyword, max_number=keyword_image_limit, proxy=proxy, proxy_type=proxy_type)
+            images = Crawler.crawl_image_urls(keyword, max_number=keyword_image_limit, proxy=proxy, proxy_type=proxy_type)
             print('images crawled')
             image_filenames = list(map(lambda x: "{}_{}.jpg".format(keyword,x),range(len(images))))
             image_filenames = list(map(lambda x: str(category_path/x), image_filenames))
             images_detail = {filename: image for image, filename in zip(images, image_filenames)}
-            asyncio.run(async_downloder.fetch_all(images_detail, timeout=download_timeout, proxy_type=proxy_type, proxy=proxy))
+            asyncio.run(AsyncDownloader.fetch_all(images_detail, timeout=download_timeout, proxy_type=proxy_type, proxy=proxy))
             print('images downloaded')
 
             details["category"].extend([category]*len(images))
@@ -170,17 +172,17 @@ def train_test_split(images_df, splits:list, working_dir):
     
     return splits_df
 
-def main(config_filename):
-    if 'json' not in config_filename:
-        return
+# def main(config_filename):
+#     # if 'json' not in config_filename:
+#         # return
     
-    config = read_config(config_filename)
-    details_filename = config_filename.replace('.json','.report.csv')
-    images_df = download_images(config)
-    images_df = validate_images(images_df)
-    images_df = train_test_split(images_df, config['datasets'], config['working_dir'])
-    images_df.to_csv(details_filename, index=False)
-    return images_df
+#     # config = read_config(config_filename)
+#     details_filename = config_filename.replace('.json','.report.csv')
+#     images_df = download_images(config)
+#     images_df = validate_images(images_df)
+#     images_df = train_test_split(images_df, config['datasets'], config['working_dir'])
+#     images_df.to_csv(details_filename, index=False)
+#     return images_df
 
-if __name__ == '__main__':
-    details_frame = main(sys.argv[1])
+# if __name__ == '__main__':
+#     details_frame = main(sys.argv[1])

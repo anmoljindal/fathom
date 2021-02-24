@@ -1,10 +1,11 @@
+import os
 import re
 import time
-import shutil
-import argparse
 
 from urllib.parse import unquote, quote
 from selenium import webdriver
+
+import Meta
 
 def google_gen_query_url(keywords, search_options=["safe_mode"]):
     base_url = "https://www.google.com/search?tbm=isch&hl=en"
@@ -24,7 +25,7 @@ def google_image_url_from_webpage(driver, max_number):
     while True:
         try:
             thumb_elements = driver.find_elements_by_class_name("rg_i")
-            print("Find {} images.".format(len(thumb_elements)))
+            # print("Find {} images.".format(len(thumb_elements)))
             if len(thumb_elements) >= max_number:
                 break
             if len(thumb_elements) == len(thumb_elements_old):
@@ -34,39 +35,41 @@ def google_image_url_from_webpage(driver, max_number):
             time.sleep(2)
             show_more = driver.find_elements_by_class_name("mye4qd")
             if len(show_more) == 1 and show_more[0].is_displayed() and show_more[0].is_enabled():
-                print("Click show_more button.")
+                # print("Click show_more button.")
                 show_more[0].click()
             time.sleep(3)
         except Exception as e:
-            print("Exception ", e)
+            # print("Exception ", e)
             pass
     
     if len(thumb_elements) == 0:
         return []
 
-    print("Click on each thumbnail image to get image url, may take a moment ...")
+    # print("Click on each thumbnail image to get image url, may take a moment ...")
 
     retry_click = []
     for i, elem in enumerate(thumb_elements):
         try:
             if i != 0 and i % 50 == 0:
-                print("{} thumbnail clicked.".format(i))
+                pass
+                # print("{} thumbnail clicked.".format(i))
             if not elem.is_displayed() or not elem.is_enabled():
                 retry_click.append(elem)
                 continue
             elem.click()
         except Exception as e:
-            print("Error while clicking in thumbnail:", e)
+            # print("Error while clicking in thumbnail:", e)
             retry_click.append(elem)
 
     if len(retry_click) > 0:    
-        print("Retry some failed clicks ...")
+        # print("Retry some failed clicks ...")
         for elem in retry_click:
             try:
                 if elem.is_displayed() and elem.is_enabled():
                     elem.click()
             except Exception as e:
-                print("Error while retrying click:", e)
+                pass
+                # print("Error while retrying click:", e)
     
     image_elements = driver.find_elements_by_class_name("islib")
     image_urls = list()
@@ -82,8 +85,7 @@ def google_image_url_from_webpage(driver, max_number):
 
 def crawl_image_urls(keywords, max_number=10000, search_options=["safe_mode"],
                      proxy=None, proxy_type="http"):
-    chrome_path = shutil.which("chromedriver")
-    chrome_path = "./bin/chromedriver" if chrome_path is None else chrome_path
+    chrome_path = os.path.join(Meta.metadata_path, 'chromedriver')
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("headless")
     if proxy is not None and proxy_type is not None:
@@ -100,5 +102,5 @@ def crawl_image_urls(keywords, max_number=10000, search_options=["safe_mode"],
     else:
         output_num = max_number
 
-    print("\n== {0} out of {1} crawled images urls will be used.\n".format(output_num, len(image_urls)))
+    # print("\n== {0} out of {1} crawled images urls will be used.\n".format(output_num, len(image_urls)))
     return image_urls[0:output_num]
