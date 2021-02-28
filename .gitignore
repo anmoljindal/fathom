@@ -123,3 +123,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Datafiles
+.jpg
+.jpeg
+.png
+.csv
+.json
