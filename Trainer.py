@@ -1,6 +1,4 @@
 import os
-# import sys
-# import json
 
 import pandas as pd
 import tensorflow as tf
@@ -73,11 +71,6 @@ def get_model(model_name, n_classes, image_size, augmentations, base_learning_ra
 
     return model
 
-# def read_config(filename):
-#     with open(filename, "r") as file:
-#         data = json.load(file)
-#     return data
-
 def train_model(model, train_dataset, validation_dataset, epochs):
 
     history = model.fit(
@@ -105,48 +98,3 @@ def get_training_report(history):
         "validation loss"       :   val_loss
     })
     return report
-
-
-# def main(json_filename):
-
-#     config = read_config(json_filename)
-    
-#     datasets = get_datasets(
-#         working_dir=config['working_dir'],
-#         batch_size=config['batch_size'],
-#         image_size=config['image_size']
-#     )
-#     print('dataset fetched')
-
-#     model = get_model(
-#         model_name=config['model'], 
-#         n_classes=len(config['groups']), 
-#         image_size=config['image_size'], 
-#         augmentations=config['augmentations'], 
-#         base_learning_rate=config['base_learning_rate']
-#     )
-#     print('model fetched')
-    
-#     history = model.fit(
-#         datasets['train'],
-#         epochs=config['epochs'],
-#         validation_data=datasets['validation']
-#     )
-
-#     return history, model
-
-# if __name__ == '__main__':
-#     history, model = main(sys.argv[1])
-
-#     acc = history.history['accuracy']
-#     val_acc = history.history['val_accuracy']
-#     loss = history.history['loss']
-#     val_loss = history.history['val_loss']
-
-#     report = pd.DataFrame({
-#         "acc"       :   acc,
-#         "val_acc"   :   val_acc,
-#         "loss"      :   loss,
-#         "val_loss"  :   val_loss
-#     })
-#     report.to_csv('report.csv',index=False)

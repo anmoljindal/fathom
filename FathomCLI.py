@@ -3,6 +3,9 @@ import json
 import shutil
 import argparse
 from copy import deepcopy
+from pathlib import Path
+
+import pandas as pd
 
 import Meta
 import Trainer
@@ -68,7 +71,8 @@ def validate_project_json(project_json):
         return error_message
     return
 
-def download_dataset(project_json):
+def get_project_dataset(project_json):
+
     project_path = project_json['working_dir']
     if not os.path.exists(project_path):
         os.mkdir(project_path)
@@ -78,17 +82,126 @@ def download_dataset(project_json):
         os.mkdir(images_path)
 
     dataset_file = os.path.join(project_path, 'dataset.csv')
+    if os.path.exists(dataset_file):
+        dataset = pd.read_csv(dataset_file)
+    else:
+        dataset = None
+    
+    details = {'images_path':images_path,"dataset":dataset, "dataset_path":dataset_file}
+    return details
+
+def get_split_path(existing_path, new_path):
+    filename = os.path.basename(existing_path)
+    new_path = new_path/filename
+    return new_path
+
+def move_file(source, destination):
+    if source.exists():
+        source.replace(destination)
+
+def train_test_split(images_df, splits:list, working_dir):
+    total = 0
+    for split in splits:
+        total += split[1]
+    
+    if total != 100:
+        raise Exception('invalid split - does not equal 100')
+
+    splits_df = {split[0]:[] for split in splits}
+    for category in images_df['category'].unique().tolist():
+        cat_images_df = images_df[images_df['category']==category]
+        cat_images_df = cat_images_df.sample(frac=1.0)
+        total = len(cat_images_df)
+        num_splits = len(splits) - 1
+        for i, [split_name, split] in enumerate(splits):
+            limit = (split*total)//100
+            if i == num_splits:
+                subset = cat_images_df.copy()
+            else:
+                subset = cat_images_df.sample(limit)
+            
+            cat_images_df = cat_images_df[~cat_images_df['path'].isin(subset['path'].tolist())]
+            splits_df[split_name].append(subset)
+    
+    splits_df = {split:pd.concat(dfs, sort=False).assign(split=split) for split, dfs in splits_df.items()}
+    splits_df = pd.concat(splits_df.values())
+    
+    ##move to folders
+    frame_list = []
+    working_dir = Path(working_dir)
+    splits_df = splits_df[pd.notnull(splits_df['path'])]
+    splits_df['path'] = splits_df['path'].apply(Path)
+    for split in splits:
+        split_folder = working_dir/split[0]
+        if not os.path.exists(split_folder):
+            os.mkdir(split_folder)
+        
+        subset = splits_df[splits_df['split']==split[0]]
+        for category in subset.category.unique().tolist():
+            category_split_folder = split_folder/category
+            if not os.path.exists(category_split_folder):
+                os.mkdir(category_split_folder)
+            
+            category_subset = subset[subset['category']==category]
+            category_subset['new_path'] = category_subset['path'].apply(lambda x: get_split_path(x, category_split_folder))
+            category_subset.apply(lambda row: move_file(row['path'], row['new_path']), axis=1)
+            frame_list.append(category_subset)
+    
+    splits_df = pd.concat(frame_list, sort=False)
+    splits_df['path'] = splits_df['new_path'].apply(str)
+    splits_df.drop(['new_path'], axis=1, inplace=True)
+
+    #folder cleanup
+    for x in os.listdir(working_dir):
+        if os.path.isfile(working_dir/x):
+            os.unlink(working_dir/x)
+            continue
+        
+        if x not in [split[0] for split in splits]:
+            shutil.rmtree(working_dir/x)
+    
+    return splits_df
+
+def add_to_dataset(project_json, category, imagefiles):
+    details = get_project_dataset(project_json)
+    dataset = []
+    
+    for imagefile in imagefiles:
+        image_filename = os.path.join(details['images_path'], imagefile.name)
+        image = Image.oepn(imagefile)
+        image.save(image_filename)
+        dataset.append({"category":category, "path":image_filename})
+    
+    dataset = pd.DataFrame(dataset)
+    if details['dataset'] is not None:
+        dataset = pd.concat([details['dataset'], dataset], sort=False)
+    dataset = train_test_split(dataset, project_json['data_splits'], details['images_path'])
+    dataset.to_csv(details['dataset_path'], index=False)
+    return dataset
+
+def remove_from_dataset(project_json, imagepaths):
+    details = get_project_dataset(project_json)
+    dataset = details['dataset']
+    dataset = dataset[~dataset['path'].isin(imagepaths)]
+    dataset = train_test_split(dataset, project_json['data_splits'], details['images_path'])
+    dataset.to_csv(details['dataset_path'], index=False)
+    return dataset
+
+def download_dataset(project_json):
+    details = get_project_dataset(project_json)
 
     proxy, proxy_type = None, None
     if Meta.proxy_config is not None:
         proxy = Meta.proxy_config['proxy']
         proxy_type = Meta.proxy_config['proxy_type']
 
-    dataset = GoogleImagesDownloader.download_images(images_path, groups=project_json['groups'],
+    dataset = GoogleImagesDownloader.download_images(details['images_path'], groups=project_json['groups'],
         proxy=proxy, proxy_type=proxy_type, download_timeout=Meta.download_timeout)
     dataset = GoogleImagesDownloader.validate_images(dataset)
-    dataset = GoogleImagesDownloader.train_test_split(dataset, project_json['data_splits'], images_path)
-    dataset.to_csv(dataset_file, index=False)
+    if details['dataset'] is not None:
+        dataset = pd.concat([dataset, details['dataset']], sort=False)
+    dataset = train_test_split(dataset, project_json['data_splits'], details['images_path'])
+    dataset.to_csv(details['dataset_path'], index=False)
     return dataset
 
 def train_model(project_json):

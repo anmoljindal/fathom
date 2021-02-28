@@ -1,6 +1,5 @@
 import os
 import sys
-# import json
 import shutil
 import asyncio
 from pathlib import Path
@@ -13,25 +12,7 @@ import AsyncDownloader
 
 pd.options.mode.chained_assignment = None
 
-# def read_config(filename):
-#     with open(filename, "r") as file:
-#         data = json.load(file)
-#     return data
-
-# def download_images(config):
 def download_images(working_dir, groups, proxy=None, proxy_type=None, download_timeout=20):
-
-    # working_dir = Path(config['working_dir'])
-    # if 'proxy' in config:
-    #     proxy_type = config['proxy']['proxy_type']
-    #     proxy = config['proxy']['proxy']
-    # else:
-    #     proxy_type = None
-    #     proxy = None
-
-    # download_timeout = 20 #standard
-    # if 'download_timeout' in config:
-    #     download_timeout = config['download_timeout']
 
     working_dir = Path(working_dir)
     details = {
@@ -104,85 +85,3 @@ def validate_images(images_df):
     images_df = images_df[images_df['is_valid_filepath']]
     images_df.drop(['is_valid_filepath'], axis=1, inplace=True)
     return images_df
-
-def move_file(source, destination):
-    if not destination.exists():
-        source.replace(destination)
-
-def get_split_path(existing_path, new_path):
-    filename = str(existing_path).split('/')[-1].split('\\')[-1]
-    new_path = new_path/filename
-    return new_path
-
-def train_test_split(images_df, splits:list, working_dir):
-    
-    total = 0
-    for split in splits:
-        total += split[1]
-    
-    if total != 100:
-        raise Exception('invalid split - does not equal 100')
-
-    splits_df = {split[0]:[] for split in splits}
-    for category in images_df['category'].unique().tolist():
-        cat_images_df = images_df[images_df['category']==category]
-        cat_images_df = cat_images_df.sample(frac=1.0)
-        total = len(cat_images_df)
-        num_splits = len(splits) - 1
-        for i, [split_name, split] in enumerate(splits):
-            limit = (split*total)//100
-            if i == num_splits:
-                subset = cat_images_df.copy()
-            else:
-                subset = cat_images_df.sample(limit)
-            
-            cat_images_df = cat_images_df[~cat_images_df['path'].isin(subset['path'].tolist())]
-            splits_df[split_name].append(subset)
-    
-    splits_df = {split:pd.concat(dfs, sort=False).assign(split=split) for split, dfs in splits_df.items()}
-    splits_df = pd.concat(splits_df.values())
-    
-    ##move to folders
-    frame_list = []
-    working_dir = Path(working_dir)
-    splits_df = splits_df[pd.notnull(splits_df['path'])]
-    splits_df['path'] = splits_df['path'].apply(Path)
-    for split in splits:
-        split_folder = working_dir/split[0]
-        if not os.path.exists(split_folder):
-            os.mkdir(split_folder)
-        
-        subset = splits_df[splits_df['split']==split[0]]
-        for category in subset.category.unique().tolist():
-            category_split_folder = split_folder/category
-            if not os.path.exists(category_split_folder):
-                os.mkdir(category_split_folder)
-            
-            category_subset = subset[subset['category']==category]
-            category_subset['new_path'] = category_subset['path'].apply(lambda x: get_split_path(x, category_split_folder))
-            category_subset.apply(lambda row: move_file(row['path'], row['new_path']), axis=1)
-            frame_list.append(category_subset)
-    
-    splits_df = pd.concat(frame_list, sort=False)
-    splits_df['path'] = splits_df['new_path'].apply(str)
-    splits_df.drop(['new_path'], axis=1, inplace=True)
-
-    for category in splits_df.category.unique().tolist():
-        shutil.rmtree(working_dir/category)     #folder cleanup
-    
-    return splits_df
-
-# def main(config_filename):
-#     # if 'json' not in config_filename:
-#         # return
-    
-#     # config = read_config(config_filename)
-#     details_filename = config_filename.replace('.json','.report.csv')
-#     images_df = download_images(config)
-#     images_df = validate_images(images_df)
-#     images_df = train_test_split(images_df, config['datasets'], config['working_dir'])
-#     images_df.to_csv(details_filename, index=False)
-#     return images_df
-
-# if __name__ == '__main__':
-#     details_frame = main(sys.argv[1])

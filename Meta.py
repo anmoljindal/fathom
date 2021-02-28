@@ -24,7 +24,6 @@ if not os.path.exists(logs_path):
     os.mkdir(logs_path)
 
 ## Log Configuration
-
 app_log_file = os.path.join(logs_path, 'app.log')
 
 ## Proxy Information
@@ -61,3 +60,14 @@ augmentation_options = [
 model_options = [
     "mobilenet_v2"
 ]
+
+def scan_projects():
+    projects = {}
+    for project in os.listdir(projects_path):
+        project_dir = os.path.join(projects_path, project)
+        projects[project] = {}
+        dataset_file = os.path.join(project_dir, 'dataset.csv')
+        if os.path.exists(dataset_file):
+            projects[project]['image_details'] = dataset_file
+    
+    return projects
