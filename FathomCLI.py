@@ -28,10 +28,16 @@ def get_project_details(project_name):
     
     json_filename = os.path.join(project_path, '{}.json'.format(project_name))
     project_json = read_json_file(json_filename)
-
-    ## get accuracy report 
-    ## get dataset file
     return project_json
+
+def update_project_json(project_name, project_json):
+
+    project_path = os.path.join(Meta.projects_path, project_name)
+    if not os.path.exists(project_path):
+        raise Exception("project does not exists")
+    
+    json_filename = os.path.join(project_path, '{}.json'.format(project_name))
+    write_json_file(project_json, json_filename)
 
 def create_project(project_name: str, 
         groups: dict, splits: list, augmentations: list, batch_size: int, image_size: int,
@@ -61,8 +67,7 @@ def create_project(project_name: str,
     project_json['base_learning_rate'] = base_learning_rate
     project_json['epochs'] = epochs
 
-    json_filename = os.path.join(project_path, '{}.json'.format(project_name))
-    write_json_file(project_json, json_filename)
+    update_project_json(project_name, project_json)
     return project_json
 
 def validate_project_json(project_json):
@@ -204,7 +209,7 @@ def download_dataset(project_json):
     dataset.to_csv(details['dataset_path'], index=False)
     return dataset
 
-def train_model(project_json):
+def train_model(project_json, custom_callbacks=[]):
 
     project_path = project_json['working_dir']
     images_path = os.path.join(project_path, 'images')
@@ -231,21 +236,28 @@ def train_model(project_json):
         base_learning_rate=project_json['base_learning_rate']
     )
     
+    project_json['current_model_version'] += 1
+    model_filename = os.path.join(models_path, str(project_json['current_model_version']))
+    tblog_filename = "{}.logs".format(project_json['current_model_version'])
+    tblog_filename = os.path.join(reports_path, tblog_filename)
+
     model, history = Trainer.train_model(
         model,
         datasets['train'], 
         epochs=project_json['epochs'],
-        validation_dataset=datasets['validation'] 
+        validation_dataset=datasets['validation'],
+        logs=tblog_filename,
+        custom_callbacks=custom_callbacks
     )
 
-    project_json['current_model_version'] += 1
-    model_filename = os.path.join(models_path, str(project_json['current_model_version']))
+    
     model.save(model_filename)
 
     training_report = Trainer.get_training_report(history)
     training_report_filename = "{}.report.csv".format(project_json['current_model_version'])
     training_report_filename = os.path.join(reports_path, training_report_filename)
     training_report.to_csv(training_report_filename, index=False)
+    update_project_json(project_json['project'], project_json)
 
     return history, model, project_json['current_model_version']
 

@@ -1,8 +1,12 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from PIL import Image
+import os
+
 import cv2
+import numpy as np
+import pandas as pd
+from PIL import Image
+import streamlit as st
+import tensorflow as tf
+import plotly.express as px
 
 import Meta
 import SessionState
@@ -86,6 +90,20 @@ def get_category_group_text(groups):
 	
 	return "\n ".join(details_list)
 
+class StreamlitTrainingCallback(tf.keras.callbacks.Callback):
+
+	def __init__(self, placeholder):
+		super().__init__()
+		self.progress_bar = placeholder.progress(0.0)
+
+	def set_params(self, params):
+		super().set_params(params)
+		self.epochs = params['epochs']
+
+	def on_epoch_end(self, epoch, logs=None):
+		ratio_complete = epoch/self.epochs
+		self.progress_bar.progress(ratio_complete)
+
 if navigation_choice == "Home":
 	pass
 elif navigation_choice == "Create":
@@ -152,50 +170,85 @@ elif navigation_choice == "Datasets":
 	selection_row = st.beta_columns(2)
 	with selection_row[0]:
 		selected_project = st.selectbox("Select Project", list(projects.keys()))
-	project_json = FathomCLI.get_project_details(selected_project)
-	with selection_row[1]:
-		selected_category = st.selectbox("Select Category", list(project_json['groups'].keys()))
 	
-	uploaded_files = st.file_uploader("Upload images", type=['png', 'jpg'], accept_multiple_files=True)
-	operation_row = st.beta_columns(2)
-	with operation_row[0]:
-		if st.button("Upload Images"):
-			FathomCLI.add_to_dataset(project_json, selected_category, uploaded_files)
+	if selected_project is not None:
+		project_json = FathomCLI.get_project_details(selected_project)
+		with selection_row[1]:
+			selected_category = st.selectbox("Select Category", list(project_json['groups'].keys()))
+		
+		uploaded_files = st.file_uploader("Upload images", type=['png', 'jpg'], accept_multiple_files=True)
+		operation_row = st.beta_columns(2)
+		with operation_row[0]:
+			if st.button("Upload Images"):
+				FathomCLI.add_to_dataset(project_json, selected_category, uploaded_files)
 
-	with operation_row[1]:
-		if st.button("Download from google"):
-			with st.spinner('Crawling and Downloading...'):
-				dataset = FathomCLI.download_dataset(project_json)
+		with operation_row[1]:
+			if st.button("Download from google"):
+				with st.spinner('Crawling and Downloading...'):
+					dataset = FathomCLI.download_dataset(project_json)
 
-	if 'image_details' in projects[selected_project]:
-		dataset = pd.read_csv(projects[selected_project]['image_details'])
-		grouping = dataset.groupby(['category','split']).size().reset_index(drop=False)
-		grouping.rename(columns={0:"images"}, inplace=True)
-		st.dataframe(grouping)
+		if 'image_details' in projects[selected_project]:
+			dataset = pd.read_csv(projects[selected_project]['image_details'])
+			grouping = dataset.groupby(['category','split']).size().reset_index(drop=False)
+			grouping.rename(columns={0:"images"}, inplace=True)
+			fig = px.bar(grouping, x="category", y="images", color="split", title="Data summary")
+			st.plotly_chart(fig)
 
-		columns_per_page = 4
-		rows_per_page = 10
-		dataset_list = dataset[dataset['category']==selected_category].to_dict(orient='records')
-		data_chunks = [dataset_list[x:x+columns_per_page] for x in range(0, len(dataset_list), columns_per_page)]
-		selected_images = []
+			columns_per_page = 4
+			rows_per_page = 10
+			dataset_list = dataset[dataset['category']==selected_category].to_dict(orient='records')
+			data_chunks = [dataset_list[x:x+columns_per_page] for x in range(0, len(dataset_list), columns_per_page)]
+			selected_images = []
 
-		for _, chunk in paginator("select a page", data_chunks, items_per_page=rows_per_page):
-			image_row = st.beta_columns(len(chunk))
-			for item, image_cell in zip(chunk, image_row):
-				with image_cell:
-					check = st.checkbox(item['split'], key=item['path'])
-					try:
-						image = Image.open(item['path']).convert('RGB')
-						st.image(image)
-					except:
-						continue
-					if check:
-						selected_images.append(item['path'])
+			for _, chunk in paginator("select a page", data_chunks, items_per_page=rows_per_page):
+				image_row = st.beta_columns(len(chunk))
+				for item, image_cell in zip(chunk, image_row):
+					with image_cell:
+						check = st.checkbox(item['split'], key=item['path'])
+						try:
+							image = Image.open(item['path']).convert('RGB')
+							st.image(image)
+						except:
+							continue
+						if check:
+							selected_images.append(item['path'])
 
-		if st.sidebar.button("remove images"):
-			dataset = FathomCLI.remove_from_dataset(project_json, selected_images)
+			if st.sidebar.button("remove images"):
+				dataset = FathomCLI.remove_from_dataset(project_json, selected_images)
 
 elif navigation_choice == "Models":
-	pass
+	projects = Meta.scan_projects()
+	selected_project = st.selectbox("Select Project", list(projects.keys()))
+	if selected_project is not None:
+		project_json = FathomCLI.get_project_details(selected_project)
+		if 'image_details' in projects[selected_project]:
+			if st.button('Train/Retrain Model'):
+				# with st.spinner('Training...'):
+				placeholder = st.empty()
+				streamlit_train_callback = StreamlitTrainingCallback(placeholder)
+				history, model, model_version = FathomCLI.train_model(project_json, custom_callbacks=[streamlit_train_callback])
+				st.write('training model complete, model number: {}'.format(model_version))
+				placeholder.empty()
+		else:
+			st.error("no dataset for the selected project")
+	
+		reports_folder = os.path.join(project_json['working_dir'],'reports')
+		reports = list(filter(lambda x: x.endswith('report.csv'), os.listdir(reports_folder)))
+		versions = list(map(lambda x: x.split('.')[0], reports))
+		selected_version = st.selectbox("Select Version", versions)
+		if selected_version is not None:
+			execution_report_filename = os.path.join(reports_folder, '{}.report.csv'.format(selected_version))
+			
+			execution_report = pd.read_csv(execution_report_filename)
+			loss_report = execution_report[['epoch','loss','validation loss']]
+			accuracy_report = execution_report[['epoch','accuracy','valdidation accuracy']]
+			loss_report = loss_report.melt(id_vars=['epoch'])
+			accuracy_report = accuracy_report.melt(id_vars=['epoch'])
+
+			fig1 = px.line(loss_report, x="epoch", y="value", color='variable', hover_name="variable", title='loss')
+			fig2 = px.line(accuracy_report, x="epoch", y="value", color="variable", hover_name="variable", title='accuracy')
+			st.plotly_chart(fig1)
+			st.plotly_chart(fig2)
+
 elif navigation_choice == "Deploy":
 	pass

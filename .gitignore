@@ -124,9 +124,12 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Datafiles
+# Project and datafiles
 .jpg
 .jpeg
 .png
 .csv
 .json
+projects/
+metadata/
+logs/

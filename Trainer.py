@@ -71,12 +71,19 @@ def get_model(model_name, n_classes, image_size, augmentations, base_learning_ra
 
     return model
 
-def train_model(model, train_dataset, validation_dataset, epochs):
+def train_model(model, train_dataset, validation_dataset, epochs, logs=None, custom_callbacks=[]):
+
+    if logs is not None:
+        tb_callback = tf.keras.callbacks.TensorBoard(logs, update_freq=1)
+        callbacks = custom_callbacks+[tb_callback]
+    else:
+        callbacks = custom_callbacks
 
     history = model.fit(
         train_dataset, 
         epochs=epochs,
-        validation_data=validation_dataset
+        validation_data=validation_dataset,
+        callbacks=callbacks
     )
 
     return model, history
